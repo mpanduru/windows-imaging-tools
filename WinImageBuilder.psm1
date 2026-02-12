@@ -803,26 +803,29 @@ function Get-VirtIODrivers {
             continue
         }
         if ($IsNutanixImage) {
+            Write-Log "Following Nutanix ISO structure..."
             foreach ($folder in $nutanixVirtioFolderMappings[$osVersion]) {
                 $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
                                                         $folder,
                                                         $nutanixVirtioArchMappings)
+                Write-Log "Testing path $driverPath..."
                 if (Test-Path $driverPath) {
+                    Write-Log "Path succeeded!"
                     break
                 }
+                Write-Log "Path failed!"
             }
-            
         } else {
             foreach ($driver in $VirtioDrivers) {
                 $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
                                                     $driver,
                                                     $osVersion,
                                                     $architecture)
-                if (Test-Path $driverPath) {
-                    $driverPaths += $driverPath
-                    break
-                }
             }
+        }
+        if (Test-Path $driverPath) {
+            $driverPaths += $driverPath
+            break
         }
     }
     if (!$driverPaths -and $RecursionDepth -lt 1) {
@@ -830,7 +833,7 @@ function Get-VirtIODrivers {
         $driverPaths = Get-VirtIODrivers -BuildNumber 9600 -IsServer $IsServer `
             -IsNutanixImage $IsNutanixImage -BasePath $BasePath -Architecture $Architecture -RecursionDepth 1
     }
-    Write-Log "Finished to get IO Drivers."
+    Write-Log "Finished to get IO Drivers. Path: $driverPaths"
     return $driverPaths
 }
 
