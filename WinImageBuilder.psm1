@@ -1776,11 +1776,11 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.virtio_iso_path) {
                 Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
-                    -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
+                    -isNutanixImage $($windowsImageConfig.image_type -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
             }
             if ($windowsImageConfig.virtio_base_path) {
                 Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
-                    -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -driversBasePath $windowsImageConfig.virtio_base_path
+                    -isNutanixImage $($windowsImageConfig.image_type -eq "Nutanix") -driversBasePath $windowsImageConfig.virtio_base_path
             }
             if ($windowsImageConfig.extra_features) {
                 Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features.split(",")
@@ -1913,7 +1913,7 @@ function New-WindowsFromGoldenImage {
         $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
         if ($windowsImageConfig.virtio_iso_path) {
             Add-VirtIODriversFromISO -vhdDriveLetter $driveLetterGold -image $imageInfo `
-                -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
+                -isNutanixImage $($windowsImageConfig.image_type -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
         }
 
         if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
