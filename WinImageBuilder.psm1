@@ -806,8 +806,8 @@ function Get-VirtIODrivers {
             Write-Log "Following Nutanix ISO structure..."
             foreach ($folder in $nutanixVirtioFolderMappings[$osVersion]) {
                 $driverPath = "{0}\{1}\{2}" -f @($basePath,
-                                                        $folder,
-                                                        $nutanixVirtioArchMappings)
+                                                 $folder,
+                                                 $nutanixVirtioArchMappings[$Architecture])
                 Write-Log "Testing path $driverPath..."
                 if (Test-Path $driverPath) {
                     Write-Log "Path succeeded!"
