@@ -56,6 +56,28 @@ $VirtIODriverMappings = @{
     "2k25" = @(26100, $MAX_BUILD_NUMBER, $true);
 }
 
+$nutanixVirtioFolderMappings = @{
+    "2k8" = @("Windows Server 2008 (Legacy)", "Windows Server 2008");
+    "2k8r2" = @("Windows Server 2008 R2 (Legacy)", "Windows Server 2008 R2");
+    "w7" = @("Windows 7 (Legacy)", "Windows 7");
+    "2k12" = @("Windows Server 2012 (Legacy)", "Windows Server 2012");
+    "w8" = @("Windows 8 (Legacy)", "Windows 8");
+    "2k12r2" = @("Windows Server 2012 R2 (Legacy)", "Windows Server 2012 R2");
+    "w8.1" = @("Windows 8.1 (Legacy)", "Windows 8.1");
+    "2k16" = @("Windows Server 2016");
+    "w10" = @("Windows 10");
+    "w11" = @("Windows 11");
+    "2k19" = @("Windows Server 2019");
+    "2k22" = @("Windows Server 2022");
+    "2k25" = @("Windows Server 2025");
+}
+
+$nutanixVirtioArchMappings = @{
+    "amd64" = "x64"
+    "i386" = "x86"
+    "x86" = "x86"
+}
+
 $AvailableCompressionFormats = @("tar","gz","zip")
 
 . "$scriptPath\Interop.ps1"
@@ -759,6 +781,8 @@ function Get-VirtIODrivers {
         [parameter(Mandatory=$true)]
         [bool]$IsServer,
         [parameter(Mandatory=$true)]
+        [bool]$IsNutanixImage,
+        [parameter(Mandatory=$true)]
         [string]$BasePath,
         [parameter(Mandatory=$true)]
         [string]$Architecture,
@@ -782,6 +806,17 @@ function Get-VirtIODrivers {
                                                  $driver,
                                                  $osVersion,
                                                  $architecture)
+            if ($IsNutanixImage) {
+                foreach ($folder in $nutanixVirtioFolderMappings[$osVersion]) {
+                    $driverPath = "{0}\{1}\{2}\{3}" -f @($basePath,
+                                                         $folder,
+                                                         $nutanixVirtioArchMappings)
+                    if (Test-Path $driverPath) {
+                        break
+                    }
+                }
+                
+            }
             if (Test-Path $driverPath) {
                 $driverPaths += $driverPath
                 break
@@ -791,7 +826,7 @@ function Get-VirtIODrivers {
     if (!$driverPaths -and $RecursionDepth -lt 1) {
         # Note(avladu): Fallback to 2012r2/w8.1 if no drivers are found
         $driverPaths = Get-VirtIODrivers -BuildNumber 9600 -IsServer $IsServer `
-            -BasePath $BasePath -Architecture $Architecture -RecursionDepth 1
+            -IsNutanixImage $IsNutanixImage -BasePath $BasePath -Architecture $Architecture -RecursionDepth 1
     }
     Write-Log "Finished to get IO Drivers."
     return $driverPaths
@@ -803,6 +838,8 @@ function Add-VirtIODrivers {
         [string]$vhdDriveLetter,
         [parameter(Mandatory=$true)]
         [object]$image,
+        [parameter(Mandatory=$true)]
+        [bool]$isNutanixImage,
         [parameter(Mandatory=$true)]
         [string]$driversBasePath
     )
@@ -831,8 +868,8 @@ function Add-VirtIODrivers {
     # For VirtIO ISO with drivers version higher than 1.8.x
     $buildNumber = [int]$image.ImageVersion.Build
     $virtioDriversPaths = Get-VirtIODrivers -BuildNumber $buildNumber `
-        -IsServer ([bool](Is-ServerInstallationType $image)) -BasePath $driversBasePath `
-        -Architecture $image.ImageArchitecture
+        -IsServer ([bool](Is-ServerInstallationType $image)) -IsNutanixImage $isNutanixImage `
+        -BasePath $driversBasePath -Architecture $image.ImageArchitecture
     foreach ($virtioDriversPath in $virtioDriversPaths) {
         if (Test-Path $virtioDriversPath) {
             Add-DriversToImage $vhdDriveLetter $virtioDriversPath
@@ -856,6 +893,9 @@ function Add-VirtIODriversFromISO {
     .PARAMETER Image
      The exact flavor of Windows installed on that image, so that the supported VirtIO drivers
      can be installed.
+    .PARAMETER IsNutanixImage
+     Whether or not the Windows image is built for Nutanix. If the value is true, the nutanix
+     ISO folder structure will be used.
     .PARAMETER ISOPath
      The full path of the VirtIO ISO file containing the drivers.
     #>
@@ -864,6 +904,8 @@ function Add-VirtIODriversFromISO {
         [string]$vhdDriveLetter,
         [parameter(Mandatory=$true)]
         [object]$image,
+        [parameter(Mandatory=$true)]
+        [bool]$isNutanixImage,
         [parameter(Mandatory=$true)]
         [string]$isoPath
     )
@@ -892,7 +934,7 @@ function Add-VirtIODriversFromISO {
             $driversBasePath += ":"
             Write-Log "Adding drivers from $driversBasePath"
             Add-VirtIODrivers -vhdDriveLetter $vhdDriveLetter -image $image `
-                -driversBasePath $driversBasePath
+                -isNutanixImage $isNutanixImage -driversBasePath $driversBasePath
         } else {
             throw "The $isoPath is not a valid iso path."
         }
@@ -1586,7 +1628,7 @@ function New-WindowsOnlineImage {
             Remove-Item -Force $virtualDiskPath
         }
 
-        if ($windowsImageConfig.image_type -eq "KVM") {
+        if ($windowsImageConfig.image_type -in @("KVM", "Nutanix")) {
             $imagePath = $barePath + ".qcow2"
             Write-Log "Converting VHD to Qcow2"
             Convert-VirtualDisk -vhdPath $virtualDiskPath -outPath $imagePath -format "qcow2" `
@@ -1729,11 +1771,11 @@ function New-WindowsCloudImage {
             }
             if ($windowsImageConfig.virtio_iso_path) {
                 Add-VirtIODriversFromISO -vhdDriveLetter $winImagePath -image $image `
-                    -isoPath $windowsImageConfig.virtio_iso_path
+                    -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
             }
             if ($windowsImageConfig.virtio_base_path) {
                 Add-VirtIODrivers -vhdDriveLetter $winImagePath -image $image `
-                    -driversBasePath $windowsImageConfig.virtio_base_path
+                    -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -driversBasePath $windowsImageConfig.virtio_base_path
             }
             if ($windowsImageConfig.extra_features) {
                 Enable-FeaturesInImage $winImagePath $windowsImageConfig.extra_features.split(",")
@@ -1866,7 +1908,7 @@ function New-WindowsFromGoldenImage {
         $imageInfo = Get-ImageInformation $driveLetterGold -ImageName $windowsImageConfig.image_name
         if ($windowsImageConfig.virtio_iso_path) {
             Add-VirtIODriversFromISO -vhdDriveLetter $driveLetterGold -image $imageInfo `
-                -isoPath $windowsImageConfig.virtio_iso_path
+                -isNutanixImage $($windowsImageConfig.image_path -eq "Nutanix") -isoPath $windowsImageConfig.virtio_iso_path
         }
 
         if ($windowsImageConfig.drivers_path -and (Test-Path $windowsImageConfig.drivers_path)) {
@@ -1939,7 +1981,7 @@ function New-WindowsFromGoldenImage {
             $imagePath = $imagePathRaw
         }
 
-        if ($windowsImageConfig.image_type -eq "KVM") {
+        if ($windowsImageConfig.image_type -in @("KVM", "Nutanix")) {
             $imagePathQcow2 = $barePath + ".qcow2"
             Write-Log "Converting VHD to QCow2"
             Convert-VirtualDisk -vhdPath $imagePath -outPath $imagePathQcow2 `
@@ -2046,7 +2088,7 @@ function Test-OfflineWindowsImage {
                 $diskFormat = 'vpc'
             }
         }
-        if ($windowsImageConfig.image_type -eq "KVM") {
+        if ($windowsImageConfig.image_type -in @("KVM", "Nutanix")) {
             $fileExtension = 'qcow2'
             $diskFormat = 'qcow2'
         }
